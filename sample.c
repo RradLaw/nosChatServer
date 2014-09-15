@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <sys/filio.h>
+//#include <sys/filio.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -56,6 +56,33 @@ struct client_thread {
 };
 
 pthread_rwlock_t message_log_lock;
+
+int read_from_socket(int sock,unsigned char *buffer,int *count,int buffer_size,
+		     int timeout)
+{
+  fcntl(sock,F_SETFL,fcntl(sock, F_GETFL, NULL)|O_NONBLOCK);
+
+
+  int t=time(0)+timeout;
+  if (*count>=buffer_size) return 0;
+  int r=read(sock,&buffer[*count],buffer_size-*count);
+  //NOSNOTE need count to be some value
+  while(r!=0) {
+    if (r>0) {
+      (*count)+=r;
+      break;
+    }
+    r=read(sock,&buffer[*count],buffer_size-*count);
+    if (r==-1&&errno!=EAGAIN) {
+      perror("read() returned error. Stopping reading from socket.");
+      return -1;
+    } else usleep(100000);
+    // timeout after a few seconds of nothing
+    if (time(0)>=t) break;
+  }
+  buffer[*count]=0;
+  return 0;
+}
 
 int create_listen_socket(int port)
 {
@@ -98,6 +125,52 @@ int accept_incoming(int sock)
   return -1;
 }
 
+//thread!?!
+int handle_connection(int fd){
+  // Got connection -- do something with it.
+  char msg[1024];
+  char channel[8192];
+  int registered=0;
+  unsigned char buffer[8192];
+  int length=0;
+  snprintf(msg,1024,":ircserver.com 020 * :gday m8\n");
+  write(fd,msg,strlen(msg));
+  while(1){
+  	length=0;
+  	read_from_socket(fd,buffer,&length,8192,3);
+  	if(length==0){
+  	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out (bye bye)\n");
+  	  write(fd,msg,strlen(msg));
+  	  close(fd);
+  	  return 0;
+  	}
+
+  	buffer[length]=0;
+  	int r=sscanf((char *)buffer,"JOIN %s",channel); 	
+  	if(r==1) {
+  	  if(!registered) {
+  	    snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
+  	    write(fd,msg,1024);
+	  }
+  	}
+  	if (!strncasecmp('PRIVMSG',(char *)buffer,7)) {
+  	    snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
+  	    write(fd,msg,1024);
+  	}
+  	if (!strncasecmp('QUIT',(char *)buffer,4)) {
+  		// client has said they are going away
+  		// if we dont close the connection, we will get a SIGPIPE that will kill our program
+  		// when we try to read from the socket again in the loop.
+  	  	snprintf(msg,1024,"ERROR :Closing Link: Connection timed out (bye bye)\n");
+  	  	write(fd,msg,strlen(msg));
+  		close(fd);
+  		return 0;
+  	}
+  }
+  close(fd);
+  return 0;
+}
+
 int main(int argc,char **argv)
 {
   signal(SIGPIPE, SIG_IGN);
@@ -114,7 +187,7 @@ int main(int argc,char **argv)
   while(1) {
     int client_sock = accept_incoming(master_socket);
     if (client_sock!=-1) {
-      // Got connection -- do something with it.
+      handle_connection(client_sock);
     }
   }
 }
