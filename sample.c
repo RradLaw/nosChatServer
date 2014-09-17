@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/socket.h>
-//#include <sys/filio.h>
+#include <sys/filio.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -139,7 +139,7 @@ int handle_connection(int fd){
   	length=0;
   	read_from_socket(fd,buffer,&length,8192,3);
   	if(length==0){
-  	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out (bye bye)\n");
+  	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
   	  close(fd);
   	  return 0;
@@ -150,14 +150,15 @@ int handle_connection(int fd){
   	if(r==1) {
   	  if(!registered) {
   	    snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
-  	    write(fd,msg,1024);
+  	    write(fd,msg,strlen(msg));
 	  }
   	}
-  	if (!strncasecmp('PRIVMSG',(char *)buffer,7)) {
+	// Test never enters these two cases
+  	if (!strncasecmp("PRIVMSG",buffer,6)) {
   	    snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
-  	    write(fd,msg,1024);
+  	    write(fd,msg,strlen(msg));
   	}
-  	if (!strncasecmp('QUIT',(char *)buffer,4)) {
+  	if (!strncasecmp("QUIT",buffer,4)) {
   		// client has said they are going away
   		// if we dont close the connection, we will get a SIGPIPE that will kill our program
   		// when we try to read from the socket again in the loop.
