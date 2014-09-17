@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#ifndef HAVE_SYS_FILIO_H
+#ifdef HAVE_SYS_FILIO_H
 	#include <sys/filio.h>
 #endif
 #include <sys/ioctl.h>
@@ -132,6 +132,7 @@ int handle_connection(int fd){
   // Got connection -- do something with it.
   char msg[1024];
   char channel[8192];
+  char username[8192];
   int registered=0;
   unsigned char buffer[8192];
   int length=0;
@@ -139,7 +140,7 @@ int handle_connection(int fd){
   write(fd,msg,strlen(msg));
   while(1){
   	length=0;
-  	read_from_socket(fd,buffer,&length,8192,3);
+  	read_from_socket(fd,buffer,&length,8192,5);
   	if(length==0){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
@@ -155,8 +156,7 @@ int handle_connection(int fd){
   	    write(fd,msg,strlen(msg));
 	  }
   	}
-	// Test never enters these two cases
-  	if (!strncasecmp("PRIVMSG",buffer,6)) {
+  	if (!strncasecmp("PRIVMSG",buffer,7)) {
   	    snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
   	    write(fd,msg,strlen(msg));
   	}
@@ -164,11 +164,51 @@ int handle_connection(int fd){
   		// client has said they are going away
   		// if we dont close the connection, we will get a SIGPIPE that will kill our program
   		// when we try to read from the socket again in the loop.
-  	  	snprintf(msg,1024,"ERROR :Closing Link: Connection timed out (bye bye)\n");
-  	  	write(fd,msg,strlen(msg));
+  	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out (bye bye)\n");
+  	  write(fd,msg,strlen(msg));
   		close(fd);
   		return 0;
   	}
+    int n=sscanf((char *)buffer,"NICK %s",username);
+    int u=sscanf((char *)buffer,"USER %s",channel);
+    if(u==1) {
+      snprintf(msg,1024,":ircserver.com 001 %s : Gday\n",username);
+      write(fd,msg,strlen(msg));
+      snprintf(msg,1024,":ircserver.com 002 %s : Mate\n",username);
+      write(fd,msg,strlen(msg));
+      snprintf(msg,1024,":ircserver.com 003 %s : Welcome\n",username);
+      write(fd,msg,strlen(msg));
+      snprintf(msg,1024,":ircserver.com 004 %s : to %s\n",username,channel);
+      write(fd,msg,strlen(msg));
+      snprintf(msg,1024,":ircserver.com 253 %s : Enjoy\n",username);
+      write(fd,msg,strlen(msg));
+      snprintf(msg,1024,":ircserver.com 254 %s : Your\n",username);
+      write(fd,msg,strlen(msg));
+      snprintf(msg,1024,":ircserver.com 255 %s : Stay\n",username);
+      write(fd,msg,strlen(msg));
+      handle_registered(fd,username);
+    }
+  }
+  close(fd);
+  return 0;
+}
+
+
+int handle_registered(int fd, char *username){
+  char msg[1024];
+  unsigned char buffer[8192];
+  int length=0;
+  while(1) {
+    read_from_socket(fd,buffer,&length,8192,60);
+    if (!strncasecmp("QUIT",buffer,4)) {
+      // client has said they are going away
+      // if we dont close the connection, we will get a SIGPIPE that will kill our program
+      // when we try to read from the socket again in the loop.
+      snprintf(msg,1024,"ERROR :Closing Link: Connection timed out (bye bye)\n");
+      write(fd,msg,strlen(msg));
+      close(fd);
+      return 0;
+    }
   }
   close(fd);
   return 0;
