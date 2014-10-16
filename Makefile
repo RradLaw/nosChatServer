@@ -6,7 +6,7 @@ test:	test.c Makefile
 	gcc -Wall -g -o test test.c $(LOPT)
 
 sample:	sample.c Makefile
-	gcc -Wall -g -o sample sample.c $(LOPT)
+	gcc -pthread -Wall -g -o sample sample.c $(LOPT)
 
 run: test sample Makefile
 	./test ./sample

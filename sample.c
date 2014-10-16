@@ -57,6 +57,13 @@ struct client_thread {
   int next_message;
 };
 
+// allocate static structure for all client connections
+int MAX_CLIENTS=1000;
+struct client_thread threads[1000];
+
+// the number of connections we have open now
+int connections_open=0;
+
 pthread_rwlock_t message_log_lock;
 
 int read_from_socket(int sock,unsigned char *buffer,int *count,int buffer_size,
@@ -127,9 +134,22 @@ int accept_incoming(int sock)
   return -1;
 }
 
+int clientcount;
+
+void *handle_connection(void *data){
+  /*if(clientcount>MAX_CLIENTS) {
+    char msg[1024];
+    snprintf(msg,1024,"ERROR :Closing Link: Client count too great\n");
+    write(fd,msg,strlen(msg));
+    close(fd);
+  }*/
+  struct client_thread *t=data;
+  connection(t->fd);
+  return 0;
+}
+
 //thread!?!
-int handle_connection(int fd){
-  // Got connection -- do something with it.
+int connection(int fd){
   char msg[1024];
   char channel[8192];
   char username[8192];
@@ -141,7 +161,7 @@ int handle_connection(int fd){
   while(1){
   	length=0;
   	read_from_socket(fd,buffer,&length,8192,5);
-  	if(length==0){
+  	if(length==0&&registered==0){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
   	  close(fd);
@@ -186,7 +206,8 @@ int handle_connection(int fd){
       write(fd,msg,strlen(msg));
       snprintf(msg,1024,":ircserver.com 255 %s : Stay\n",username);
       write(fd,msg,strlen(msg));
-      handle_registered(fd,username);
+      registered=1;
+      //handle_registered(fd,username);
     }
   }
   close(fd);
@@ -230,7 +251,12 @@ int main(int argc,char **argv)
   while(1) {
     int client_sock = accept_incoming(master_socket);
     if (client_sock!=-1) {
-      handle_connection(client_sock);
+      struct client_thread *t=calloc(sizeof(struct client_thread),1);
+      if(t!=NULL){
+      t->fd=client_sock;
+      int err = pthread_create(&t->thread,NULL,handle_connection,(void*)t);
+      if (err) close(client_sock);
+    }
     }
   }
 }
