@@ -58,13 +58,22 @@ struct client_thread {
 };
 
 // allocate static structure for all client connections
-int MAX_CLIENTS=1000;
-struct client_thread threads[1000];
+#define MAX_CLIENTS 1024
+struct client_thread threads[MAX_CLIENTS];
 
 // the number of connections we have open now
 int connections_open=0;
 
 pthread_rwlock_t message_log_lock;
+#define MAX_MESSAGES 10000
+char *message_log[MAX_MESSAGES];
+int message_count=0;
+
+int message_log_append(char *recipient, char *message) {
+  
+  return 0;
+}
+
 
 int read_from_socket(int sock,unsigned char *buffer,int *count,int buffer_size,
 		     int timeout)
@@ -157,7 +166,7 @@ int connection(struct client_thread *t) {
   char username[8192];
   unsigned char buffer[8192];
   int length=0;
-  
+
   snprintf(msg,1024,":ircserver.com 020 * :gday m8\n");
   write(fd,msg,strlen(msg));
 
@@ -216,6 +225,7 @@ int registration_check(struct client_thread *t)
 {
   if (t->user_has_registered) return -1;
   if (t->user_command_seen&&t->nickname[0]) {
+    printf("regcheck");
     // User has now met the registration requirements
     t->user_has_registered=1;
     t->timeout=60;
