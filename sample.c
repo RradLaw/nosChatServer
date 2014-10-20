@@ -200,7 +200,7 @@ int connection(struct client_thread *t) {
     message_log_read(t);
   	read_from_socket(fd,buffer,&length,8192,1);
     if(length>0) time_of_last_data=time(0);
-  	if(!length && !t->user_has_registered && (time(0)-time_of_last_data)>t->timeout){
+  	if(!length && (time(0)-time_of_last_data)>=t->timeout){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
   	  close(fd);
