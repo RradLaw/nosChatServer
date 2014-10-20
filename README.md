@@ -124,5 +124,4 @@ To test server, run sample with port number (e.g. ./sample 12345).
 
 To run client on it, run telnet on localhost with the port number (e.g. telnet localhost 12345).
 
-
 To compile with tests, just run with make.

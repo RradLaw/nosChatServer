@@ -136,7 +136,7 @@ int accept_incoming(int sock)
 
 int clientcount;
 
-void *handle_connection(void *data){
+void *handle_connection(void *data) {
   /*if(clientcount>MAX_CLIENTS) {
     char msg[1024];
     snprintf(msg,1024,"ERROR :Closing Link: Client count too great\n");
@@ -148,7 +148,7 @@ void *handle_connection(void *data){
   return 0;
 }
 
-int connection(int fd){
+int connection(int fd) {
   char msg[1024];
   char channel[8192];
   char username[8192];
@@ -177,8 +177,8 @@ int connection(int fd){
   	}
   	if (!strncasecmp("PRIVMSG",buffer,7)) {
         if(!registered) snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
-        else snprintf(msg,1024,":ircserver.com PRIVMSG %s : PRIVMSG command sent after registration\n", username);//this shouldnt be working
-  	    write(fd,msg,strlen(msg));
+        else snprintf(msg,1024,":ircserver.com PRIVMSG %s PRIVMSG command sent after registration\n", username);//this shouldnt be working
+        write(fd,msg,strlen(msg));
   	}
   	if (!strncasecmp("QUIT",buffer,4)) {
   		// client has said they are going away
@@ -192,19 +192,20 @@ int connection(int fd){
     int n=sscanf((char *)buffer,"NICK %s",username);
     int u=sscanf((char *)buffer,"USER %s",channel);
     if(u==1) {
+      //insert proper codes
       snprintf(msg,1024,":ircserver.com 001 %s : Gday\n",username);
       write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 002 %s : Mate\n",username);
+      snprintf(msg,1024,":ircserver.com 002 %s : mate.\n",username);
       write(fd,msg,strlen(msg));
       snprintf(msg,1024,":ircserver.com 003 %s : Welcome\n",username);
       write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 004 %s : to %s\n",username,channel);
+      snprintf(msg,1024,":ircserver.com 004 %s : to %s.\n",username,channel);
       write(fd,msg,strlen(msg));
       snprintf(msg,1024,":ircserver.com 253 %s : Enjoy\n",username);
       write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 254 %s : Your\n",username);
+      snprintf(msg,1024,":ircserver.com 254 %s : your\n",username);
       write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 255 %s : Stay\n",username);
+      snprintf(msg,1024,":ircserver.com 255 %s : stay.\n",username);
       write(fd,msg,strlen(msg));
       registered=1;
       //handle_registered(fd,username);
@@ -215,7 +216,7 @@ int connection(int fd){
 }
 
 
-int handle_registered(int fd, char *username){
+int handle_registered(int fd, char *username) {
   char msg[1024];
   unsigned char buffer[8192];
   int length=0;
@@ -235,8 +236,7 @@ int handle_registered(int fd, char *username){
   return 0;
 }
 
-int main(int argc,char **argv)
-{
+int main(int argc,char **argv) {
   signal(SIGPIPE, SIG_IGN);
 
   if (argc!=2) {
@@ -253,10 +253,11 @@ int main(int argc,char **argv)
     if (client_sock!=-1) {
       struct client_thread *t=calloc(sizeof(struct client_thread),1);
       if(t!=NULL){
-      t->fd=client_sock;
-      int err = pthread_create(&t->thread,NULL,handle_connection,(void*)t);
-      if (err) close(client_sock);
-    }
+        t->fd=client_sock;
+        int err = pthread_create(&t->thread,NULL,handle_connection,(void*)t);
+        if (err) close(client_sock);
+      }
+      else usleep(10000);
     }
   }
 }
