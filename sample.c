@@ -69,14 +69,16 @@ pthread_rwlock_t message_log_lock = PTHREAD_RWLOCK_INITIALIZER;
 #define MAX_MESSAGES 10000
 char *message_log[MAX_MESSAGES];
 char *message_log_recipients[MAX_MESSAGES];
+char *message_log_senders[MAX_MESSAGES];
 int message_count=0;
 
-int message_log_append(char *recipient, char *message) {
+int message_log_append(char *sender, char *recipient, char *message) {
   if (message_count>=MAX_MESSAGES) return -1;
   pthread_rwlock_wrlock(&message_log_lock);
 
   //append the message here
   message_log_recipients[message_count]=strdup(recipient);
+  message_log_senders[message_count]=strdup(sender);
   message_log[message_count]=strdup(message);
   message_count++;
 
@@ -91,8 +93,9 @@ int message_log_read(struct client_thread *t) {
   int i;
   for(i=t->next_message+1;i<message_count;i++){
     if(!strcasecmp(message_log_recipients[i],t->nickname)) {
-          snprintf(t->line,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
-          write(t->fd,t->line,strlen(t->line));
+      char msg[8192];
+      snprintf(msg,8192,":%s PRIVMSG %s :%s\n",message_log_senders[i],message_log_recipients[i],message_log[i]);
+      write(t->fd,msg,8192);
 
     }
   }
@@ -234,8 +237,10 @@ int connection(struct client_thread *t) {
           // accept and process PRIVMSG
           char recipient[1024];
           char message[1024];
+          char sender[1024];
           if (sscanf(buffer, "PRIVMSG %s : %[^\n]",recipient,message)==2) {
-              message_log_append(recipient,message);
+              snprintf(sender,1024,"%s!myusername@myserver",t->nickname);
+              message_log_append(sender,recipient,message);
           } else {
             // malformed PRIVMSG command
             snprintf(msg,1024,":ircserver.com 461 %s : Mal-formed PRIVMSG command sent\n",t->nickname);
