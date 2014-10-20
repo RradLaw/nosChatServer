@@ -64,16 +64,39 @@ struct client_thread threads[MAX_CLIENTS];
 // the number of connections we have open now
 int connections_open=0;
 
-pthread_rwlock_t message_log_lock;
+pthread_rwlock_t message_log_lock = PTHREAD_RWLOCK_INITIALIZER;
+
 #define MAX_MESSAGES 10000
 char *message_log[MAX_MESSAGES];
+char *message_log_recipients[MAX_MESSAGES];
 int message_count=0;
 
 int message_log_append(char *recipient, char *message) {
-  
+  if (message_count>=MAX_MESSAGES) return -1;
+  pthread_rwlock_wrlock(&message_log_lock);
+
+  //append the message here
+  message_log_recipients[message_count]=strdup(recipient);
+  message_log[message_count]=strdup(message);
+  message_count++;
+
+  pthread_rwlock_unlock(&message_log_lock);
   return 0;
 }
 
+int message_log_read(struct client_thread *t) {
+  pthread_rwlock_rdlock(&message_log_lock);
+
+  //Read and process new messages in the log
+  int i;
+  for(i=t->next_message+1;i<message_count;i++){
+    if(message_log_recipients[i]==t->nickname);
+  }
+  t->next_message=message_count;
+
+  pthread_rwlock_unlock(&message_log_lock);
+  return 0;
+}
 
 int read_from_socket(int sock,unsigned char *buffer,int *count,int buffer_size,
 		     int timeout)
@@ -170,10 +193,14 @@ int connection(struct client_thread *t) {
   snprintf(msg,1024,":ircserver.com 020 * :gday m8\n");
   write(fd,msg,strlen(msg));
 
+  int time_of_last_data=time(0);
+
   while(1){
   	length=0;
-  	read_from_socket(fd,buffer,&length,8192,t->timeout);
-  	if(!length&&!t->user_has_registered){
+    message_log_read(t);
+  	read_from_socket(fd,buffer,&length,8192,1);
+    if(length>0) time_of_last_data=time(0);
+  	if(!length && !t->user_has_registered && (time(0)-time_of_last_data)>t->timeout){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
   	  close(fd);
