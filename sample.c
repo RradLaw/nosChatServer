@@ -148,7 +148,6 @@ void *handle_connection(void *data){
   return 0;
 }
 
-//thread!?!
 int connection(int fd){
   char msg[1024];
   char channel[8192];
@@ -161,7 +160,7 @@ int connection(int fd){
   while(1){
   	length=0;
   	read_from_socket(fd,buffer,&length,8192,5);
-  	if(length==0&&registered==0){
+  	if(!length&&!registered){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
   	  close(fd);
@@ -174,10 +173,11 @@ int connection(int fd){
   	  if(!registered) {
   	    snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
   	    write(fd,msg,strlen(msg));
-	  }
+      }
   	}
   	if (!strncasecmp("PRIVMSG",buffer,7)) {
-  	    snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
+        if(!registered) snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
+        else snprintf(msg,1024,":ircserver.com PRIVMSG %s : PRIVMSG command sent after registration\n", username);//this shouldnt be working
   	    write(fd,msg,strlen(msg));
   	}
   	if (!strncasecmp("QUIT",buffer,4)) {
