@@ -83,6 +83,7 @@ int message_log_append(char *sender, char *recipient, char *message) {
   message_count++;
 
   pthread_rwlock_unlock(&message_log_lock);
+  printf("message for %s now in log.\n",recipient);
   return 0;
 }
 
@@ -91,12 +92,11 @@ int message_log_read(struct client_thread *t) {
 
   //Read and process new messages in the log
   int i;
-  for(i=t->next_message+1;i<message_count;i++){
+  for(i=t->next_message;i<message_count;i++){
     if(!strcasecmp(message_log_recipients[i],t->nickname)) {
       char msg[8192];
       snprintf(msg,8192,":%s PRIVMSG %s :%s\n",message_log_senders[i],message_log_recipients[i],message_log[i]);
-      write(t->fd,msg,8192);
-
+      write(t->fd,msg,strlen(msg));
     }
   }
   t->next_message=message_count;
@@ -191,6 +191,7 @@ void *handle_connection(void *data) {
 int connection(struct client_thread *t) {
   int fd=t->fd;
   t->timeout=5;
+  t->next_message=message_count;
   char msg[1024];
   char channel[8192];
   char username[8192];
@@ -232,13 +233,12 @@ int connection(struct client_thread *t) {
         if(!t->user_has_registered) {
           snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
           write(fd,msg,strlen(msg));
-        }
-        else {
+        } else {
           // accept and process PRIVMSG
           char recipient[1024];
           char message[1024];
           char sender[1024];
-          if (sscanf(buffer, "PRIVMSG %s : %[^\n]",recipient,message)==2) {
+          if (sscanf(buffer, "PRIVMSG %s :%[^\n]",recipient,message)==2) {
               snprintf(sender,1024,"%s!myusername@myserver",t->nickname);
               message_log_append(sender,recipient,message);
           } else {
@@ -253,7 +253,7 @@ int connection(struct client_thread *t) {
   		// client has said they are going away
   		// if we dont close the connection, we will get a SIGPIPE that will kill our program
   		// when we try to read from the socket again in the loop.
-  	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out (bye bye)\n");
+  	  snprintf(msg,1024,"ERROR :Closing Link: User quit\n");
   	  write(fd,msg,strlen(msg));
   		close(fd);
       connections_open--;
@@ -280,7 +280,6 @@ int registration_check(struct client_thread *t)
 {
   if (t->user_has_registered) return -1;
   if (t->user_command_seen&&t->nickname[0]) {
-    printf("regcheck");
     // User has now met the registration requirements
     t->user_has_registered=1;
     t->timeout=60;
