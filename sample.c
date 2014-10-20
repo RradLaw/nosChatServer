@@ -90,7 +90,11 @@ int message_log_read(struct client_thread *t) {
   //Read and process new messages in the log
   int i;
   for(i=t->next_message+1;i<message_count;i++){
-    if(message_log_recipients[i]==t->nickname);
+    if(!strcasecmp(message_log_recipients[i],t->nickname)) {
+          snprintf(t->line,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
+          write(t->fd,t->line,strlen(t->line));
+
+    }
   }
   t->next_message=message_count;
 
@@ -199,8 +203,11 @@ int connection(struct client_thread *t) {
   	length=0;
     message_log_read(t);
   	read_from_socket(fd,buffer,&length,8192,1);
+    buffer[length]=0;
+    
     if(length>0) time_of_last_data=time(0);
-  	if(!length && (time(0)-time_of_last_data)>=t->timeout){
+  	
+    if(!length && (time(0)-time_of_last_data)>=t->timeout){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
   	  close(fd);
@@ -208,7 +215,6 @@ int connection(struct client_thread *t) {
   	  return 0;
   	}
 
-  	buffer[length]=0;
   	int r=sscanf((char *)buffer,"JOIN %s",channel); 	
   	if(r==1) {
   	  if(!t->user_has_registered) {
@@ -218,11 +224,26 @@ int connection(struct client_thread *t) {
 
       }
   	}
+
   	if (!strncasecmp("PRIVMSG",buffer,7)) {
-        if(!t->user_has_registered) snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
-        else snprintf(msg,1024,":ircserver.com PRIVMSG %s PRIVMSG command sent after registration\n", username);//this shouldnt be working
-        write(fd,msg,strlen(msg));
+        if(!t->user_has_registered) {
+          snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
+          write(fd,msg,strlen(msg));
+        }
+        else {
+          // accept and process PRIVMSG
+          char recipient[1024];
+          char message[1024];
+          if (sscanf(buffer, "PRIVMSG %s : %[^\n]",recipient,message)==2) {
+              message_log_append(recipient,message);
+          } else {
+            // malformed PRIVMSG command
+            snprintf(msg,1024,":ircserver.com 461 %s : Mal-formed PRIVMSG command sent\n",t->nickname);
+            write(fd,msg,strlen(msg));
+          }
+        }
   	}
+
   	if (!strncasecmp("QUIT",buffer,4)) {
   		// client has said they are going away
   		// if we dont close the connection, we will get a SIGPIPE that will kill our program
@@ -233,11 +254,13 @@ int connection(struct client_thread *t) {
       connections_open--;
   		return 0;
   	}
+
     int n=sscanf((char *)buffer,"NICK %s",username);
     if(n) {
       strcpy(t->nickname,username);
       registration_check(t);
     }
+
     int u=sscanf((char *)buffer,"USER %s",channel);
     if(u==1) {
       t->user_command_seen=1;
