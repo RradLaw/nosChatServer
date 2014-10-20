@@ -137,46 +137,53 @@ int accept_incoming(int sock)
 int clientcount;
 
 void *handle_connection(void *data) {
-  /*if(clientcount>MAX_CLIENTS) {
+  struct client_thread *t=data;
+  if(++connections_open>MAX_CLIENTS) {
     char msg[1024];
     snprintf(msg,1024,"ERROR :Closing Link: Client count too great\n");
-    write(fd,msg,strlen(msg));
-    close(fd);
-  }*/
-  struct client_thread *t=data;
-  connection(t->fd);
+    write(t->fd,msg,strlen(msg));
+    close(t->fd);
+    connections_open--;
+  }
+  connection(t);
   return 0;
 }
 
-int connection(int fd) {
+int connection(struct client_thread *t) {
+  int fd=t->fd;
+  t->timeout=5;
   char msg[1024];
   char channel[8192];
   char username[8192];
-  int registered=0;
   unsigned char buffer[8192];
   int length=0;
+  
   snprintf(msg,1024,":ircserver.com 020 * :gday m8\n");
   write(fd,msg,strlen(msg));
+
   while(1){
   	length=0;
-  	read_from_socket(fd,buffer,&length,8192,5);
-  	if(!length&&!registered){
+  	read_from_socket(fd,buffer,&length,8192,t->timeout);
+  	if(!length&&!t->user_has_registered){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
   	  close(fd);
+      connections_open--;
   	  return 0;
   	}
 
   	buffer[length]=0;
   	int r=sscanf((char *)buffer,"JOIN %s",channel); 	
   	if(r==1) {
-  	  if(!registered) {
+  	  if(!t->user_has_registered) {
   	    snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
   	    write(fd,msg,strlen(msg));
+      } else {
+
       }
   	}
   	if (!strncasecmp("PRIVMSG",buffer,7)) {
-        if(!registered) snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
+        if(!t->user_has_registered) snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
         else snprintf(msg,1024,":ircserver.com PRIVMSG %s PRIVMSG command sent after registration\n", username);//this shouldnt be working
         write(fd,msg,strlen(msg));
   	}
@@ -187,53 +194,49 @@ int connection(int fd) {
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out (bye bye)\n");
   	  write(fd,msg,strlen(msg));
   		close(fd);
+      connections_open--;
   		return 0;
   	}
     int n=sscanf((char *)buffer,"NICK %s",username);
+    if(n) {
+      strcpy(t->nickname,username);
+      registration_check(t);
+    }
     int u=sscanf((char *)buffer,"USER %s",channel);
     if(u==1) {
-      //insert proper codes
-      snprintf(msg,1024,":ircserver.com 001 %s : Gday\n",username);
-      write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 002 %s : mate.\n",username);
-      write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 003 %s : Welcome\n",username);
-      write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 004 %s : to %s.\n",username,channel);
-      write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 253 %s : Enjoy\n",username);
-      write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 254 %s : your\n",username);
-      write(fd,msg,strlen(msg));
-      snprintf(msg,1024,":ircserver.com 255 %s : stay.\n",username);
-      write(fd,msg,strlen(msg));
-      registered=1;
-      //handle_registered(fd,username);
+      t->user_command_seen=1;
+      registration_check(t);
     }
   }
   close(fd);
   return 0;
 }
 
-
-int handle_registered(int fd, char *username) {
-  char msg[1024];
-  unsigned char buffer[8192];
-  int length=0;
-  while(1) {
-    read_from_socket(fd,buffer,&length,8192,60);
-    if (!strncasecmp("QUIT",buffer,4)) {
-      // client has said they are going away
-      // if we dont close the connection, we will get a SIGPIPE that will kill our program
-      // when we try to read from the socket again in the loop.
-      snprintf(msg,1024,"ERROR :Closing Link: Connection timed out (bye bye)\n");
-      write(fd,msg,strlen(msg));
-      close(fd);
-      return 0;
-    }
+int registration_check(struct client_thread *t) 
+{
+  if (t->user_has_registered) return -1;
+  if (t->user_command_seen&&t->nickname[0]) {
+    // User has now met the registration requirements
+    t->user_has_registered=1;
+    t->timeout=60;
+    char msg[1024];
+    snprintf(msg,1024,":ircserver.com 001 %s : Gday\n",t->nickname);
+    write(t->fd,msg,strlen(msg));
+    snprintf(msg,1024,":ircserver.com 002 %s : mate.\n",t->nickname);
+    write(t->fd,msg,strlen(msg));
+    snprintf(msg,1024,":ircserver.com 003 %s : Welcome\n",t->nickname);
+    write(t->fd,msg,strlen(msg));
+    snprintf(msg,1024,":ircserver.com 004 %s : to the server.\n",t->nickname);
+    write(t->fd,msg,strlen(msg));
+    snprintf(msg,1024,":ircserver.com 253 %s : ??? unknown connections\n",t->nickname);
+    write(t->fd,msg,strlen(msg));
+    snprintf(msg,1024,":ircserver.com 254 %s : ??? channels formed.\n",t->nickname);
+    write(t->fd,msg,strlen(msg));
+    snprintf(msg,1024,":ircserver.com 255 %s : I have ??? clients and ??? servers.\n",t->nickname);
+    write(t->fd,msg,strlen(msg));
+    return 0;
   }
-  close(fd);
-  return 0;
+  return -1;
 }
 
 int main(int argc,char **argv) {
