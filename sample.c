@@ -24,9 +24,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#ifdef HAVE_SYS_FILIO_H
-	#include <sys/filio.h>
-#endif
+// comment out below line on home PC
+//#include <sys/filio.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <netinet/in.h>
