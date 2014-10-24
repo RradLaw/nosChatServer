@@ -207,7 +207,7 @@ int connection(struct client_thread *t) {
     message_log_read(t);
   	read_from_socket(fd,buffer,&length,8192,1);
     buffer[length]=0;
-    
+    if(length>0) printf("user sent: %s\n",buffer);
     if(length>0) time_of_last_data=time(0);
   	
     if(!length && (time(0)-time_of_last_data)>=t->timeout){
@@ -217,14 +217,15 @@ int connection(struct client_thread *t) {
       connections_open--;
   	  return 0;
   	}
-
+    int p=sscanf((char *)buffer,"PONG\r\n%s",buffer);
+    if(p==1) printf("PONG eaten");
   	int r=sscanf((char *)buffer,"JOIN %s",channel); 	
   	if(r==1) {
   	  if(!t->user_has_registered) {
   	    snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
   	    write(fd,msg,strlen(msg));
       } else {
-
+          //make or join channel
       }
   	}
 
@@ -233,11 +234,14 @@ int connection(struct client_thread *t) {
           snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
           write(fd,msg,strlen(msg));
         } else {
+          printf("PRIVMSG command accepted\n");
+          printf("Command: %s",buffer);
           // accept and process PRIVMSG
           char recipient[1024];
           char message[1024];
           char sender[1024];
           if (sscanf(buffer, "PRIVMSG %s :%[^\n]",recipient,message)==2) {
+              printf("PRIVMSG well formed.");
               snprintf(sender,1024,"%s!myusername@myserver",t->nickname);
               message_log_append(sender,recipient,message);
           } else {
