@@ -82,7 +82,6 @@ int message_log_append(char *sender, char *recipient, char *message) {
   message_count++;
 
   pthread_rwlock_unlock(&message_log_lock);
-  printf("message for %s now in log.\n",recipient);
   return 0;
 }
 
@@ -194,14 +193,11 @@ int parse_line(struct client_thread *t, char *buffer) {
           snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
           write(t->fd,msg,strlen(msg));
         } else {
-          printf("PRIVMSG command accepted\n");
-          printf("Command: %s",buffer);
           // accept and process PRIVMSG
           char recipient[1024];
           char message[1024];
           char sender[1024];
           if (sscanf(buffer, "PRIVMSG %s :%[^\n]",recipient,message)==2) {
-              printf("PRIVMSG well formed.");
               snprintf(sender,1024,"%s!myusername@myserver",t->nickname);
               message_log_append(sender,recipient,message);
           } else {
@@ -280,7 +276,7 @@ int connection(struct client_thread *t) {
     int i;
     for(i=0;i<length;i++) {
       if(buffer[i]=='\n'||buffer[i]=='\r'){
-        if(parse_line(t,t->line)==-1)return 0;
+        if(t->line_len>0){if(parse_line(t,t->line)==-1)return 0;}
         t->line_len=0;
         bzero(t->line,1024);
       } else {
