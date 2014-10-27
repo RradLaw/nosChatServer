@@ -175,6 +175,7 @@ int accept_incoming(int sock)
 int clientcount;
 
 int parse_line(struct client_thread *t, char *buffer) {
+  printf("PARSEDBUFFER: %s\n",buffer);
   char msg[1024];
   char channel[8192];
   char username[8192];
@@ -269,7 +270,6 @@ int connection(struct client_thread *t) {
   	read_from_socket(fd,buffer,&length,8192,1);
     buffer[length]=0;
     if(length>0) time_of_last_data=time(0);
-  	
     if(!length && (time(0)-time_of_last_data)>=t->timeout){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
@@ -277,9 +277,37 @@ int connection(struct client_thread *t) {
       connections_open--;
   	  return 0;
   	}
-    if(parse_line(t,(char *)buffer)==-1)return 0;
+    int i;
+    for(i=0;i<length;i++) {
+      if(buffer[i]=='\n'||buffer[i]=='\r'){
+        if(parse_line(t,t->line)==-1)return 0;
+        t->line_len=0;
+        bzero(t->line,1024);
+      } else {
+        if (t->line_len<1024) {
+          t->line[t->line_len++]=buffer[i];
+          t->line[t->line_len]=0;
+        }
+      }
+    }
+    //if (t->line_len>0) {if(parse_line(t,(char *)buffer)==-1)return 0;}
     
   }
+/* to pass final tests 
+    for(i=0;i<length;i++) {
+      if(buffer[i]=='\n'||buffer[i]=='\r'){
+        if(parse_line(t,(char *)buffer)==-1)return 0;
+        t->line_len=0;t->line[0]=0;
+      } else {
+        if (t->line_len<1024) {
+          t->line[t->line_len++]=buffer[i];
+          t->line[t->line_len]=0;
+        }
+      }
+    }
+    if (t->line_len>0) {if(parse_line(t,(char *)buffer)==-1)return 0;}*/
+    
+
   close(fd);
   return 0;
 }
