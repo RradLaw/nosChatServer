@@ -183,6 +183,7 @@ int parse_line(struct client_thread *t, char *buffer) {
       if(!t->user_has_registered) {
         snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
         write(t->fd,msg,strlen(msg));
+        return 0;
       } else {
           //make or join channel
       }
@@ -192,6 +193,7 @@ int parse_line(struct client_thread *t, char *buffer) {
         if(!t->user_has_registered) {
           snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
           write(t->fd,msg,strlen(msg));
+          return 0;
         } else {
           // accept and process PRIVMSG
           char recipient[1024];
@@ -204,6 +206,7 @@ int parse_line(struct client_thread *t, char *buffer) {
             // malformed PRIVMSG command
             snprintf(msg,1024,":ircserver.com 461 %s : Mal-formed PRIVMSG command sent\n",t->nickname);
             write(t->fd,msg,strlen(msg));
+            return 0;
           }
         }
     }
@@ -265,7 +268,7 @@ int connection(struct client_thread *t) {
     message_log_read(t);
   	read_from_socket(fd,buffer,&length,8192,1);
     buffer[length]=0;
-    if(length>0) time_of_last_data=time(0);
+    if(length>0) {time_of_last_data=time(0);printf("BUFFERBE: %s",buffer);}
     if(!length && (time(0)-time_of_last_data)>=t->timeout){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
@@ -286,7 +289,7 @@ int connection(struct client_thread *t) {
         }
       }
     }
-    //if (t->line_len>0) {if(parse_line(t,(char *)buffer)==-1)return 0;}
+    if (t->line_len>0) {if(parse_line(t,(char *)buffer)==-1)return 0;}
     
   }
 /* to pass final tests 
