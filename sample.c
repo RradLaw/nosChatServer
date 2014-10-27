@@ -174,14 +174,11 @@ int accept_incoming(int sock)
 
 int clientcount;
 
-int parseLine(struct client_thread *t, char *buffer) {
+int parse_line(struct client_thread *t, char *buffer) {
   char msg[1024];
   char channel[8192];
   char username[8192];
-  //unsigned char buffer[8192];
-  int length=0;
-  //strcpy(buffer,buff);
-  int r=sscanf((char *)buffer,"JOIN %s",channel);   
+    int r=sscanf((char *)buffer,"JOIN %s",channel);   
     if(r==1) {
       if(!t->user_has_registered) {
         snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
@@ -222,9 +219,10 @@ int parseLine(struct client_thread *t, char *buffer) {
       write(t->fd,msg,strlen(msg));
       close(t->fd);
       connections_open--;
-      return 0;
+      return -1;
     }
 
+    //check that it is less than 32
     int n=sscanf((char *)buffer,"NICK %s",username);
     if(n) {
       strcpy(t->nickname,username);
@@ -237,8 +235,7 @@ int parseLine(struct client_thread *t, char *buffer) {
       registration_check(t);
     }
     return 0;
-  }
- 
+}
 
 void *handle_connection(void *data) {
   struct client_thread *t=data;
@@ -257,52 +254,33 @@ int connection(struct client_thread *t) {
   int fd=t->fd;
   t->timeout=5;
   t->next_message=message_count;
-  char msg[1024];
-  char channel[8192];
-  char username[8192];
   unsigned char buffer[8192];
   int length=0;
+  char msg[1024];
 
   snprintf(msg,1024,":ircserver.com 020 * :gday m8\n");
-  write(t->fd,msg,strlen(msg));
+  write(fd,msg,strlen(msg));
 
   int time_of_last_data=time(0);
 
   while(1){
   	length=0;
     message_log_read(t);
-  	read_from_socket(t->fd,buffer,&length,8192,1);
+  	read_from_socket(fd,buffer,&length,8192,1);
     buffer[length]=0;
-    if(length>0) printf("user sent: %s\n",buffer);
     if(length>0) time_of_last_data=time(0);
   	
     if(!length && (time(0)-time_of_last_data)>=t->timeout){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
-  	  write(t->fd,msg,strlen(msg));
-  	  close(t->fd);
+  	  write(fd,msg,strlen(msg));
+  	  close(fd);
       connections_open--;
   	  return 0;
   	}
-    int i;
-
-    buffer[length]=0;
-    parseLine(t,buffer);
-/* to pass final tests 
-    for(i=0;i<length;i++) {
-      if(buffer[i]=='\n'||buffer[i]=='\r'){
-        parseLine(t,t->line);
-        t->line_len=0;t->line[0]=0;
-      } else {
-        if (t->line_len<1024) {
-          t->line[t->line_len++]=buffer[i];
-          t->line[t->line_len]=0;
-        }
-      }
-    }
-    if (t->line_len>0) parseLine(t,t->line);*/
-    //parseLine(t,(char *)buffer);
+    if(parse_line(t,(char *)buffer)==-1)return 0;
+    
   }
-  close(t->fd);
+  close(fd);
   return 0;
 }
 
