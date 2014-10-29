@@ -175,7 +175,7 @@ int clientcount;
 int parse_line(struct client_thread *t, char *buffer) {
   char msg[1024];
   char channel[8192];
-  char username[8192];
+  char nickname[8192];
   if (!strncasecmp("QUIT",buffer,4)) {
     // client has said they are going away
     // if we dont close the connection, we will get a SIGPIPE that will kill our program
@@ -187,6 +187,8 @@ int parse_line(struct client_thread *t, char *buffer) {
     return -1;
   }
 
+  // if user has not registerd, returns an error
+  // else, connects user to channel
   int r=sscanf((char *)buffer,"JOIN %s",channel);   
   if(r==1) {
     if(!t->user_has_registered) {
@@ -194,10 +196,11 @@ int parse_line(struct client_thread *t, char *buffer) {
       write(t->fd,msg,strlen(msg));
       return 0;
     } else {
-      //make or join channel
+      //join channel code
     }
   }
 
+  // if user has not registered, return error
   if (!strncasecmp("PRIVMSG",buffer,7)) {
     if(!t->user_has_registered) {
       snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
@@ -212,7 +215,7 @@ int parse_line(struct client_thread *t, char *buffer) {
           snprintf(sender,1024,"%s!myusername@myserver",t->nickname);
           message_log_append(sender,recipient,message);
       } else {
-        // malformed PRIVMSG command
+        // malformed PRIVMSG command returns error
         snprintf(msg,1024,":ircserver.com 461 %s : Mal-formed PRIVMSG command sent\n",t->nickname);
         write(t->fd,msg,strlen(msg));
         return 0;
@@ -220,11 +223,15 @@ int parse_line(struct client_thread *t, char *buffer) {
     }
   }
 
-  //check that it is less than 32
-  int n=sscanf((char *)buffer,"NICK %s",username);
+  int n=sscanf((char *)buffer,"NICK %s",nickname);
   if(n) {
-    strcpy(t->nickname,username);
+    if (strlen(nickname)<=32) {
+    strcpy(t->nickname,nickname);
     registration_check(t);
+    } else {
+      snprintf(msg,1024,":ircserver.com 432 : Nickname too long\n");
+      write(t->fd,msg,strlen(msg));       
+    }
   }
 
   int u=sscanf((char *)buffer,"USER %s",channel);
@@ -235,6 +242,9 @@ int parse_line(struct client_thread *t, char *buffer) {
   return 0;
 }
 
+
+// makes sure that the connections open is not greater than the maximum clients
+// then proceeds to connection code
 void *handle_connection(void *data) {
   struct client_thread *t=data;
   if(++connections_open>MAX_CLIENTS) {
@@ -261,12 +271,15 @@ int connection(struct client_thread *t) {
 
   int time_of_last_data=time(0);
 
+  // should test for t->fd>=0 instead of 1
   while(1){
-  	length=0;
+    length=0;
+    // checks for messages for user in log
     message_log_read(t);
   	read_from_socket(fd,buffer,&length,8192,1);
     buffer[length]=0;
     if(length>0) time_of_last_data=time(0);
+    // if time since last command is greater or equal to the timeout, close connection
     if(!length && (time(0)-time_of_last_data)>=t->timeout){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
@@ -274,9 +287,14 @@ int connection(struct client_thread *t) {
       connections_open--;
   	  return 0;
   	}
+    // parse each character of the line
     int i;
     for(i=0;i<length;i++) {
+      // checks if there is a newline or return character
       if(buffer[i]=='\n'||buffer[i]=='\r'){
+        // if there is a newline or return character, parse the line
+        // checks if the line closes the connection, then exit the function
+        // finally resets the line and linelength variables
         if(t->line_len>0 && parse_line(t,t->line)==-1)return 0;
         t->line_len=0;
         bzero(t->line,1024);
@@ -287,28 +305,16 @@ int connection(struct client_thread *t) {
         }
       }
     }
+    // if there are remaining bytes, parse the line
+    // if the socket is closed, exit function
     if (t->line_len>0 && parse_line(t,(char *)buffer)==-1) return 0;
-    
   }
-/* to pass final tests 
-    for(i=0;i<length;i++) {
-      if(buffer[i]=='\n'||buffer[i]=='\r'){
-        if(parse_line(t,(char *)buffer)==-1)return 0;
-        t->line_len=0;t->line[0]=0;
-      } else {
-        if (t->line_len<1024) {
-          t->line[t->line_len++]=buffer[i];
-          t->line[t->line_len]=0;
-        }
-      }
-    }
-    if (t->line_len>0) {if(parse_line(t,(char *)buffer)==-1)return 0;}*/
-    
-
   close(fd);
   return 0;
 }
 
+// checks if the user has sent both USER and NICK commands
+// then sends user confirmation of connection
 int registration_check(struct client_thread *t) 
 {
   if (t->user_has_registered) return -1;
@@ -325,11 +331,11 @@ int registration_check(struct client_thread *t)
     write(t->fd,msg,strlen(msg));
     snprintf(msg,1024,":ircserver.com 004 %s : to the server.\n",t->nickname);
     write(t->fd,msg,strlen(msg));
-    snprintf(msg,1024,":ircserver.com 253 %s : ??? unknown connections\n",t->nickname);
+    snprintf(msg,1024,":ircserver.com 253 %s : some unknown connections\n",t->nickname);
     write(t->fd,msg,strlen(msg));
-    snprintf(msg,1024,":ircserver.com 254 %s : ??? channels formed.\n",t->nickname);
+    snprintf(msg,1024,":ircserver.com 254 %s : some channels formed.\n",t->nickname);
     write(t->fd,msg,strlen(msg));
-    snprintf(msg,1024,":ircserver.com 255 %s : I have ??? clients and ??? servers.\n",t->nickname);
+    snprintf(msg,1024,":ircserver.com 255 %s : I have %i clients and some servers.\n",t->nickname,connections_open);
     write(t->fd,msg,strlen(msg));
     return 0;
   }
@@ -347,7 +353,8 @@ int main(int argc,char **argv) {
   int master_socket = create_listen_socket(atoi(argv[1]));
   
   fcntl(master_socket,F_SETFL,fcntl(master_socket, F_GETFL, NULL)&(~O_NONBLOCK));  
-  
+  // allocates memory for an array of structs
+  // creates thread for the handle connection function
   while(1) {
     int client_sock = accept_incoming(master_socket);
     if (client_sock!=-1) {
