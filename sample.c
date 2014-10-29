@@ -170,12 +170,11 @@ int accept_incoming(int sock)
   return -1;
 }
 
-int clientcount;
-
 int parse_line(struct client_thread *t, char *buffer) {
   char msg[1024];
   char channel[8192];
   char nickname[8192];
+  
   if (!strncasecmp("QUIT",buffer,4)) {
     // client has said they are going away
     // if we dont close the connection, we will get a SIGPIPE that will kill our program
@@ -185,19 +184,6 @@ int parse_line(struct client_thread *t, char *buffer) {
     close(t->fd);
     connections_open--;
     return -1;
-  }
-
-  // if user has not registerd, returns an error
-  // else, connects user to channel
-  int r=sscanf((char *)buffer,"JOIN %s",channel);   
-  if(r==1) {
-    if(!t->user_has_registered) {
-      snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
-      write(t->fd,msg,strlen(msg));
-      return 0;
-    } else {
-      //join channel code
-    }
   }
 
   // if user has not registered, return error
@@ -220,6 +206,19 @@ int parse_line(struct client_thread *t, char *buffer) {
         write(t->fd,msg,strlen(msg));
         return 0;
       }
+    }
+  }
+
+  // if user has not registerd, returns an error
+  // else, connects user to channel
+  int r=sscanf((char *)buffer,"JOIN %s",channel);   
+  if(r==1) {
+    if(!t->user_has_registered) {
+      snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
+      write(t->fd,msg,strlen(msg));
+      return 0;
+    } else {
+      //join channel code
     }
   }
 
