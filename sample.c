@@ -108,7 +108,6 @@ int read_from_socket(int sock,unsigned char *buffer,int *count,int buffer_size,
 {
   fcntl(sock,F_SETFL,fcntl(sock, F_GETFL, NULL)|O_NONBLOCK);
 
-
   int t=time(0)+timeout;
   if (*count>=buffer_size) return 0;
   int r=read(sock,&buffer[*count],buffer_size-*count);
@@ -174,67 +173,66 @@ int accept_incoming(int sock)
 int clientcount;
 
 int parse_line(struct client_thread *t, char *buffer) {
-  printf("PARSEDBUFFER: %s\n",buffer);
   char msg[1024];
   char channel[8192];
   char username[8192];
-    int r=sscanf((char *)buffer,"JOIN %s",channel);   
-    if(r==1) {
-      if(!t->user_has_registered) {
-        snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
+  if (!strncasecmp("QUIT",buffer,4)) {
+    // client has said they are going away
+    // if we dont close the connection, we will get a SIGPIPE that will kill our program
+    // when we try to read from the socket again in the loop.
+    snprintf(msg,1024,"ERROR :Closing Link: User quit\n");
+    write(t->fd,msg,strlen(msg));
+    close(t->fd);
+    connections_open--;
+    return -1;
+  }
+
+  int r=sscanf((char *)buffer,"JOIN %s",channel);   
+  if(r==1) {
+    if(!t->user_has_registered) {
+      snprintf(msg,1024,":ircserver.com 241 * : JOIN command sent before registration\n");
+      write(t->fd,msg,strlen(msg));
+      return 0;
+    } else {
+      //make or join channel
+    }
+  }
+
+  if (!strncasecmp("PRIVMSG",buffer,7)) {
+    if(!t->user_has_registered) {
+      snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
+      write(t->fd,msg,strlen(msg));
+      return 0;
+    } else {
+      // accept and process PRIVMSG
+      char recipient[1024];
+      char message[1024];
+      char sender[1024];
+      if (sscanf(buffer, "PRIVMSG %s :%[^\n]",recipient,message)==2) {
+          snprintf(sender,1024,"%s!myusername@myserver",t->nickname);
+          message_log_append(sender,recipient,message);
+      } else {
+        // malformed PRIVMSG command
+        snprintf(msg,1024,":ircserver.com 461 %s : Mal-formed PRIVMSG command sent\n",t->nickname);
         write(t->fd,msg,strlen(msg));
         return 0;
-      } else {
-          //make or join channel
       }
     }
+  }
 
-    if (!strncasecmp("PRIVMSG",buffer,7)) {
-        if(!t->user_has_registered) {
-          snprintf(msg,1024,":ircserver.com 241 * : PRIVMSG command sent before registration\n");
-          write(t->fd,msg,strlen(msg));
-          return 0;
-        } else {
-          // accept and process PRIVMSG
-          char recipient[1024];
-          char message[1024];
-          char sender[1024];
-          if (sscanf(buffer, "PRIVMSG %s :%[^\n]",recipient,message)==2) {
-              snprintf(sender,1024,"%s!myusername@myserver",t->nickname);
-              message_log_append(sender,recipient,message);
-          } else {
-            // malformed PRIVMSG command
-            snprintf(msg,1024,":ircserver.com 461 %s : Mal-formed PRIVMSG command sent\n",t->nickname);
-            write(t->fd,msg,strlen(msg));
-            return 0;
-          }
-        }
-    }
+  //check that it is less than 32
+  int n=sscanf((char *)buffer,"NICK %s",username);
+  if(n) {
+    strcpy(t->nickname,username);
+    registration_check(t);
+  }
 
-    if (!strncasecmp("QUIT",buffer,4)) {
-      // client has said they are going away
-      // if we dont close the connection, we will get a SIGPIPE that will kill our program
-      // when we try to read from the socket again in the loop.
-      snprintf(msg,1024,"ERROR :Closing Link: User quit\n");
-      write(t->fd,msg,strlen(msg));
-      close(t->fd);
-      connections_open--;
-      return -1;
-    }
-
-    //check that it is less than 32
-    int n=sscanf((char *)buffer,"NICK %s",username);
-    if(n) {
-      strcpy(t->nickname,username);
-      registration_check(t);
-    }
-
-    int u=sscanf((char *)buffer,"USER %s",channel);
-    if(u==1) {
-      t->user_command_seen=1;
-      registration_check(t);
-    }
-    return 0;
+  int u=sscanf((char *)buffer,"USER %s",channel);
+  if(u==1) {
+    t->user_command_seen=1;
+    registration_check(t);
+  }
+  return 0;
 }
 
 void *handle_connection(void *data) {
@@ -268,7 +266,7 @@ int connection(struct client_thread *t) {
     message_log_read(t);
   	read_from_socket(fd,buffer,&length,8192,1);
     buffer[length]=0;
-    if(length>0) {time_of_last_data=time(0);printf("BUFFERBE: %s",buffer);}
+    if(length>0) time_of_last_data=time(0);
     if(!length && (time(0)-time_of_last_data)>=t->timeout){
   	  snprintf(msg,1024,"ERROR :Closing Link: Connection timed out length=0\n");
   	  write(fd,msg,strlen(msg));
@@ -279,7 +277,7 @@ int connection(struct client_thread *t) {
     int i;
     for(i=0;i<length;i++) {
       if(buffer[i]=='\n'||buffer[i]=='\r'){
-        if(t->line_len>0){if(parse_line(t,t->line)==-1)return 0;}
+        if(t->line_len>0 && parse_line(t,t->line)==-1)return 0;
         t->line_len=0;
         bzero(t->line,1024);
       } else {
@@ -289,7 +287,7 @@ int connection(struct client_thread *t) {
         }
       }
     }
-    if (t->line_len>0) {if(parse_line(t,(char *)buffer)==-1)return 0;}
+    if (t->line_len>0 && parse_line(t,(char *)buffer)==-1) return 0;
     
   }
 /* to pass final tests 
