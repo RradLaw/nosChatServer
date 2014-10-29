@@ -16,6 +16,8 @@ Sometimes the PRIVMSG before registration appears after the test program is sear
 
 Line 28 of sample.c and test.c might need to be uncommented. It was commented out for my home PC as filio.h was included in ioctl.h.
 
+Compiling program on mars rather than lofty passes all tests.
+
 Programming notes
 -----------------
 To test server, run sample with port number (e.g. ./sample 12345).
