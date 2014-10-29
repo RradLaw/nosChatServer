@@ -71,6 +71,8 @@ char *message_log_recipients[MAX_MESSAGES];
 char *message_log_senders[MAX_MESSAGES];
 int message_count=0;
 
+// returns error if message count is greater than specified max messages
+// appends message to the end of the message lock
 int message_log_append(char *sender, char *recipient, char *message) {
   if (message_count>=MAX_MESSAGES) return -1;
   pthread_rwlock_wrlock(&message_log_lock);
@@ -88,7 +90,8 @@ int message_log_append(char *sender, char *recipient, char *message) {
 int message_log_read(struct client_thread *t) {
   pthread_rwlock_rdlock(&message_log_lock);
 
-  //Read and process new messages in the log
+  // read and process new messages in the log
+  // makes sure messages are unseen and meant for the user
   int i;
   for(i=t->next_message;i<message_count;i++){
     if(!strcasecmp(message_log_recipients[i],t->nickname)) {
