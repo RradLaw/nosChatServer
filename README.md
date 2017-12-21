@@ -1,7 +1,8 @@
-nos2014assignment
+nos Chat Server
 =================
 Introduction
 -------------
+A simple chat server for Network and Operating Systems assignment (2014).
 This program passes all tests as required, as seen in the file "output.txt".
 
 Compiling notes
